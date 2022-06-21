@@ -1,0 +1,134 @@
+#import library
+
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import json
+import nltk
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.layers import Input, Embedding, LSTM , Dense,GlobalMaxPooling1D,Flatten
+from tensorflow.keras.models import Model
+import matplotlib.pyplot as plt
+#mencari dataset yang tersimpan di google drive
+
+from google.colab import drive
+drive.mount('/content/drive')
+data = "/content/drive/MyDrive/contentfinal.json"
+#importing the dataset
+with open('/content/drive/MyDrive/chatboot1/content222.json') as content:
+  data1 = json.load(content)
+  #mendapatkan semua data ke daftar
+
+
+tags = []
+inputs = []
+responses={}
+for intent in data1['intents']:
+  responses[intent['tag']]=intent['respon']
+  for lines in intent['input']:
+    inputs.append(lines)
+    tags.append(intent['tag'])
+    #mengonversi ke kerangka data
+
+data = pd.DataFrame({"inputs":inputs,
+                     "tags":tags})
+                     
+                     #mendeteksi dataset
+
+data = data.sample(frac=1)
+#menghapus tanda baca
+
+import string
+data['inputs'] = data['inputs'].apply(lambda wrd:[ltrs.lower() for ltrs in wrd if ltrs not in string.punctuation])
+data['inputs'] = data['inputs'].apply(lambda wrd: ''.join(wrd))
+data
+#tokenisasi data
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+tokenizer = Tokenizer(num_words=20000+1)
+tokenizer.fit_on_texts(data['inputs'])
+train = tokenizer.texts_to_sequences(data['inputs'])
+#apply padding
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+x_train = pad_sequences(train)
+
+#encoding the outputs
+from sklearn.preprocessing import LabelEncoder
+le = LabelEncoder()
+y_train = le.fit_transform(data['tags'])
+input_shape = x_train.shape[1]
+print(input_shape)
+
+#mendefinisikan kosakata
+
+vocabulary = len(tokenizer.word_index)
+print("number of unique words : ",vocabulary)
+output_length = le.classes_.shape[0]
+print("output length: ",output_length)
+
+#membuat model
+
+i = Input(shape=(input_shape,))
+x = Embedding(vocabulary+1,1000)(i)
+x = LSTM(100,return_sequences=True)(x)
+x = Flatten()(x)
+x = Dense(output_length,activation="softmax")(x)
+model  = Model(i,x)
+
+#mengkompilasi model
+
+model.compile(loss="sparse_categorical_crossentropy",optimizer='adam',metrics=['accuracy'])
+
+#training model
+
+train = model.fit(x_train,y_train,epochs=500)
+
+#merencanakan akurasi model
+
+plt.plot(train.history['accuracy'],label='training set accuracy')
+plt.plot(train.history['loss'],label='training set loss')
+plt.legend()
+
+#chatting
+import random
+
+
+while True:
+  texts_p = []
+  prediction_input = input('You : ')
+
+  #removing punctuation and converting to lowercase
+  prediction_input = [letters.lower() for letters in prediction_input if letters not in string.punctuation]
+  prediction_input = ''.join(prediction_input)
+  texts_p.append(prediction_input)
+
+  #tokenizing and padding
+  prediction_input = tokenizer.texts_to_sequences(texts_p)
+  prediction_input = np.array(prediction_input).reshape(-1)
+  prediction_input = pad_sequences([prediction_input],input_shape)
+
+  #getting output from model
+  output = model.predict(prediction_input)
+  output = output.argmax()
+
+  #finding the right tag and predicting
+  response_tag = le.inverse_transform([output])[0]
+  print("Baskara Borobudur Esa : ",random.choice(responses[response_tag]))
+  if response_tag == "goodbye":
+    break
+    
+    from tensorflow import keras
+
+model.save('.../content/my_model/saved50_model.pb', include_optimizer=False, save_format='h5f')
+
+from tensorflow import keras
+model = keras.models.load_model('/content/my_model/saved50_model.pb')
+
+# my_model directory
+!ls saved_model
+
+# Contains an assets folder, saved_model.pb, and variables folder.
+!ls saved_model/my_model
+
+loss, acc = model.evaluate(test_images,  test_labels, verbose=2)
+print("Untrained model, accuracy: {:5.2f}%".format(100*acc))
